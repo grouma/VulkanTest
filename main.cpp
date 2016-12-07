@@ -1,7 +1,9 @@
 #define GLFW_INCLUDE_VULKAN
+#define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/string_cast.hpp>
 #include <GLFW/glfw3.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -24,7 +26,6 @@
 #include <cstring>
 #include <array>
 
-
 const int WIDTH = 1080;
 const int HEIGHT = 720;
 const uint32_t RESOLUTION = 2048;
@@ -38,7 +39,7 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 #ifdef NDEBUG
-const bool enableValidationLayers = false;
+const bool enableValidationLayers = true;
 #else
 const bool enableValidationLayers = true;
 #endif
@@ -84,8 +85,6 @@ struct UniformBufferObject {
     glm::mat4 view;
     glm::mat4 proj;
     glm::mat4 staticModelView;
-    glm::vec3 staticCameraPosition;
-    glm::vec4 cameraParameters;
 };
 
 
@@ -312,7 +311,7 @@ class VulkanTestApplication {
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
-        VkPhysicalDeviceFeatures deviceFeatures = {  };
+        VkPhysicalDeviceFeatures deviceFeatures = {};
         deviceFeatures.geometryShader = true;
 
         VkDeviceCreateInfo createInfo = {};
@@ -382,8 +381,6 @@ class VulkanTestApplication {
             createInfo.pQueueFamilyIndices = queueFamilyIndices;
         } else {
             createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            createInfo.queueFamilyIndexCount = 0; // Optional
-            createInfo.pQueueFamilyIndices = nullptr; // Optional
         }
 
         createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
@@ -497,7 +494,6 @@ class VulkanTestApplication {
         uboLayoutBinding.descriptorCount = 1;
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT |
                                       VK_SHADER_STAGE_GEOMETRY_BIT;
-        uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
         VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
         samplerLayoutBinding.binding = 1;
@@ -589,34 +585,21 @@ class VulkanTestApplication {
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_POINT;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.cullMode = VK_CULL_MODE_NONE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
-        rasterizer.depthBiasConstantFactor = 0.0f; // Optional
-        rasterizer.depthBiasClamp = 0.0f; // Optional
-        rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
 
         VkPipelineMultisampleStateCreateInfo multisampling = {};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        multisampling.minSampleShading = 1.0f; // Optional
-        multisampling.pSampleMask = nullptr; /// Optional
-        multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
-        multisampling.alphaToOneEnable = VK_FALSE; // Optional
 
         VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
                                               VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         colorBlendAttachment.blendEnable = VK_FALSE;
-        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
-        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
 
         VkDynamicState dynamicStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -650,13 +633,9 @@ class VulkanTestApplication {
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = VK_TRUE;
         depthStencil.depthWriteEnable = VK_TRUE;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
         depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.minDepthBounds = 0.0f; // Optional
-        depthStencil.maxDepthBounds = 1.0f; // Optional
         depthStencil.stencilTestEnable = VK_FALSE;
-        depthStencil.front = {}; // Optional
-        depthStencil.back = {}; // Optional
 
         VkGraphicsPipelineCreateInfo pipelineInfo = {};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -687,7 +666,6 @@ class VulkanTestApplication {
         VkCommandPoolCreateInfo poolInfo = {};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
-        poolInfo.flags = 0; // Optional
 
         if (vkCreateCommandPool(device, &poolInfo, nullptr,
                                 commandPool.replace()) != VK_SUCCESS) {
@@ -969,7 +947,6 @@ class VulkanTestApplication {
             VkCommandBufferBeginInfo beginInfo = {};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-            beginInfo.pInheritanceInfo = nullptr; // Optional
 
             vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
 
@@ -1038,7 +1015,6 @@ class VulkanTestApplication {
             availableExtensions.insert(extensions[i].extensionName);
         }
 
-
         for (const auto& requiredExtension : requiredExtensions) {
             if (availableExtensions.find(requiredExtension) == availableExtensions.end()) {
                 std::cout << "Missing required extensions: " << requiredExtension << std::endl;
@@ -1046,7 +1022,6 @@ class VulkanTestApplication {
             }
 
         }
-
         return true;
     }
 
@@ -1092,28 +1067,26 @@ class VulkanTestApplication {
     void updateUniformBuffer() {
         UniformBufferObject ubo = {};
 
-        ubo.view = glm::lookAt(camera.cameraPos,
-                               camera.cameraPos + camera.cameraFront, camera.cameraUp);
+        // TODO(grouma) - Load this from the data file
+        ubo.staticModelView =  glm::mat4(-0.803483f, 0.0f, 0.595328f, -5.12849f,
+                                         0.021815f, 0.999328f, 0.0294426f, -1.11922f,
+                                         0.594928f, -0.0366437f, 0.802944f, -24.3537f,
+                                         0.0f, 0.0f, 0.0f, 1.0f);
 
         ubo.proj = glm::perspective(glm::radians(45.0f),
-                                    swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 2000.0f);
+                                    (float)swapChainExtent.width / (float)swapChainExtent.height, 0.01f,
+                                    2000.0f);
+
+        ubo.view = glm::lookAt(camera.cameraPos,
+                               camera.cameraPos + camera.cameraFront,
+                               camera.cameraUp);
 
         auto clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
                               0.0f, -1.0f, 0.0f, 0.0f,
-                              0.0f, 0.0f, 0.5f, 0.0f,
-                              0.0f, 0.0f, 0.5f, 1.0f);
+                              0.0f, 0.0f, 1.0f, 0.0f,
+                              0.0f, 0.0f, 0.0f, 1.0f);
 
-        ubo.proj = clip * ubo.proj;
-
-        // TODO(grouma) - Load this from the data file
-        ubo.staticModelView = glm::mat4(glm::vec4(-0.803483, 0, 0.595328, -5.12849),
-                                        glm::vec4(0.021815, 0.999328, 0.0294426, -1.11922),
-                                        glm::vec4(0.594928, -0.0366437, 0.802944, -24.3537),
-                                        glm::vec4(0, 0, 0, 1));
-
-        // TODO(grouma) - Determine correct static camera parameters and position
-        ubo.staticCameraPosition = glm::vec3(0.0f, 0.0f, -1.0f);
-        ubo.cameraParameters = glm::vec4(0.1f, 0.1f, -1.0f, 1.0f);
+        ubo.proj = clip * ubo.proj ;
 
         void* data;
         vkMapMemory(device, uniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);
@@ -1152,8 +1125,8 @@ class VulkanTestApplication {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,
-                          VK_NULL_HANDLE) != VK_SUCCESS) {
+        result = vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to submit draw command buffer!");
         }
 
@@ -1166,7 +1139,6 @@ class VulkanTestApplication {
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
-        presentInfo.pResults = nullptr; // Optional
 
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
