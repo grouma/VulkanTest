@@ -18,12 +18,22 @@ class Camera {
     Camera(int width, int height) {
         lastX = width / 2;
         lastY = height / 2;
-        handleMouseInput(lastX, lastY);
     };
+
+    bool viewChanged() {
+        return _viewChanged;
+    }
+
+    void setViewChanged(bool newValue) {
+        _viewChanged = newValue;
+    }
 
     void handleMouseInput(double xpos, double ypos) {
         float xoffset = xpos - lastX;
         float yoffset = ypos - lastY;
+
+        if (xoffset == 0 && yoffset == 0) return;
+
         lastX = xpos;
         lastY = ypos;
 
@@ -47,6 +57,8 @@ class Camera {
         front.z = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
 
         cameraFront = glm::normalize(front);
+
+        setViewChanged(true);
     }
 
     void handleKeyInput(int key) {
@@ -59,10 +71,13 @@ class Camera {
             cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
         if (key == GLFW_KEY_D)
             cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+        setViewChanged(true);
     }
 
   private:
     float lastX, lastY, yaw = 0, pitch = 0;
+    bool _viewChanged = false;
 
 };
 

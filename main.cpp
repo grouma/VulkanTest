@@ -30,6 +30,11 @@ const int WIDTH = 1080;
 const int HEIGHT = 720;
 const uint32_t RESOLUTION = 2048;
 
+const auto clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, -1.0f, 0.0f, 0.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f);
+
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_LUNARG_standard_validation"
 };
@@ -39,7 +44,7 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 #ifdef NDEBUG
-const bool enableValidationLayers = true;
+const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
@@ -82,9 +87,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
 
 struct UniformBufferObject {
-    glm::mat4 view;
-    glm::mat4 proj;
+    glm::mat4 modelView;
     glm::mat4 staticModelView;
+    glm::vec3 staticCameraPosition;
 };
 
 
@@ -690,7 +695,6 @@ class VulkanTestApplication {
         utility::createImageView(device, depthImage, depthFormat,
                                  VK_IMAGE_ASPECT_DEPTH_BIT,
                                  depthImageView);
-
         utility::transitionImageLayout(device, commandPool, graphicsQueue, depthImage,
                                        depthFormat, VK_IMAGE_LAYOUT_UNDEFINED,
                                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -766,7 +770,6 @@ class VulkanTestApplication {
                                        VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         utility::copyImage(device, commandPool, graphicsQueue, stagingImage,
                            textureImage, texWidth, texHeight);
-
         utility::transitionImageLayout(device, commandPool, graphicsQueue, textureImage,
                                        VK_FORMAT_R8G8B8A8_UNORM,
                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -1045,19 +1048,23 @@ class VulkanTestApplication {
 
     void renderLoop() {
         int frames = 0;
-        auto tStart =
+        auto startTime =
             std::chrono::high_resolution_clock::now();
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
-            updateUniformBuffer();
+            if (camera.viewChanged()) {
+                updateUniformBuffer();
+                camera.setViewChanged(false);
+            }
             drawFrame();
             frames++;
-            auto tEnd = std::chrono::high_resolution_clock::now();
-            auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
-            if (tDiff > 1000.0) {
-                const float fps = frames * 1000 / tDiff;
+            auto time = std::chrono::high_resolution_clock::now();
+            auto timeDiff = std::chrono::duration<double, std::milli>
+                            (time - startTime).count();
+            if (timeDiff > 1000.0) {
+                const float fps = frames * 1000 / timeDiff;
                 frames = 0;
-                tStart = tEnd;
+                startTime = time;
                 std::cout << "FPS:" << fps << std::endl;
             }
         }
@@ -1073,20 +1080,15 @@ class VulkanTestApplication {
                                          0.594928f, -0.0366437f, 0.802944f, -24.3537f,
                                          0.0f, 0.0f, 0.0f, 1.0f);
 
-        ubo.proj = glm::perspective(glm::radians(45.0f),
-                                    (float)swapChainExtent.width / (float)swapChainExtent.height, 0.01f,
-                                    2000.0f);
+        ubo.staticCameraPosition = utility::lookAtCameraPosition(ubo.staticModelView);
 
-        ubo.view = glm::lookAt(camera.cameraPos,
-                               camera.cameraPos + camera.cameraFront,
-                               camera.cameraUp);
-
-        auto clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
-                              0.0f, -1.0f, 0.0f, 0.0f,
-                              0.0f, 0.0f, 1.0f, 0.0f,
-                              0.0f, 0.0f, 0.0f, 1.0f);
-
-        ubo.proj = clip * ubo.proj ;
+        ubo.modelView =  clip *
+                         glm::perspective(glm::radians(45.0f),
+                                          (float)swapChainExtent.width / (float)swapChainExtent.height, 0.001f,
+                                          256.0f) *
+                         glm::lookAt(camera.cameraPos,
+                                     camera.cameraPos + camera.cameraFront,
+                                     camera.cameraUp);
 
         void* data;
         vkMapMemory(device, uniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);

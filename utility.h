@@ -505,6 +505,11 @@ bool checkValidationLayerSupport(std::vector<const char*> validationLayers) {
     return true;
 }
 
+glm::vec3 lookAtCameraPosition(glm::mat4 modelView) {
+    return glm::transpose(glm::mat3(modelView)) * -glm::vec3(modelView[3][0],
+            modelView[3][1], modelView[3][2]);
+}
+
 }
 
 

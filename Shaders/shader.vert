@@ -3,9 +3,9 @@
 #extension GL_ARB_shading_language_420pack : enable
 
 layout(binding = 0) uniform UniformBufferObject {
-    mat4 view;
-    mat4 proj;
+    mat4 modelView;
 	mat4 staticModelView;
+	vec3 staticCameraPosition;
 } ubo;
 layout(binding = 1) uniform sampler2D texSampler;
 
@@ -18,12 +18,7 @@ vec3 unproject(vec3 win, mat4 modelviewMatrix) {
 	return vec3(-outVals[0], outVals[1], outVals[2]) / outVals.w;
 }
 
-vec3 lookAtToCameraPosition(mat4 mat) {
-	return transpose(mat3(mat)) * -vec3(mat[3][0], mat[3][1], mat[3][2]);
-}
-
-vec3 reconstructWorldPosition(vec2 ndc, float rayLength, mat4 modelviewMatrix) {
-	vec3 staticCameraPosition = lookAtToCameraPosition(modelviewMatrix);
+vec3 reconstructWorldPosition(vec2 ndc, float rayLength, mat4 modelviewMatrix, vec3 staticCameraPosition) {
 	vec3 planePosition = unproject(vec3(ndc, 1), modelviewMatrix);
 	vec3 ray = rayLength * normalize(planePosition - staticCameraPosition);
 	return staticCameraPosition + ray;
@@ -34,6 +29,6 @@ void main() {
 
 	float depth = texture(texSampler, texCoordGeom).w;
 
-	vec3 positionFromDepth = reconstructWorldPosition(position.xy, depth, ubo.staticModelView);
+	vec3 positionFromDepth = reconstructWorldPosition(position.xy, depth, ubo.staticModelView, ubo.staticCameraPosition);
 	gl_Position = vec4(positionFromDepth,1);
 }
