@@ -26,9 +26,11 @@
     <None Include="Shaders\compile.bat">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="Shaders\point.geom" />
+    <None Include="Shaders\point.vert" />
+    <None Include="Shaders\mesh.vert" />
+    <None Include="Shaders\mesh.geom" />
     <None Include="Shaders\shader.frag" />
-    <None Include="Shaders\shader.vert" />
-    <None Include="Shaders\shader.geom" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="utility.h">

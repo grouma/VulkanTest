@@ -10,9 +10,8 @@
 
 class Camera {
   public:
-    // TODO(grouma) - Use data file to determine correct front position
     glm::vec3 cameraPos = glm::vec3(0, 0, 0);
-    glm::vec3 cameraFront = glm::vec3(-0.8f, -0.05, 1.0f);
+    glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
     glm::vec3 cameraUp = glm::vec3(0.0f, -1.0f, 0.0f);
 
     Camera(int width, int height) {

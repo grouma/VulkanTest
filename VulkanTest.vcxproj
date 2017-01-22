@@ -158,8 +158,10 @@
   <ItemGroup>
     <None Include="Shaders\compile.bat" />
     <None Include="Shaders\shader.frag" />
-    <None Include="Shaders\shader.geom" />
-    <None Include="Shaders\shader.vert" />
+    <None Include="Shaders\point.geom" />
+    <None Include="Shaders\point.vert" />
+    <None Include="Shaders\mesh.geom" />
+    <None Include="Shaders\mesh.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera.h" />

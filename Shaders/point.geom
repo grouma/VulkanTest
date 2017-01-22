@@ -9,7 +9,6 @@ in vec2 texCoordGeom[];
 
 layout(binding = 0) uniform UniformBufferObject {
     mat4 modelView;
-	mat4 staticModelView;
 } ubo;
 
 layout(location = 0) out vec2 texCoord;
@@ -19,3 +18,4 @@ void main() {
 		texCoord = texCoordGeom[0];
 		EmitVertex();
 }
+

@@ -44,10 +44,16 @@ const std::vector<const char*> deviceExtensions = {
 };
 
 #ifdef NDEBUG
-const bool enableValidationLayers = false;
+const bool enableValidationLayers = true;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+enum ShaderType {
+    sphericalPoint, sphericalMesh
+};
+
+const ShaderType SHADER_TYPE = sphericalMesh;
 
 void DestroyDebugReportCallbackEXT(VkInstance instance,
                                    VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) {
@@ -88,8 +94,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
 struct UniformBufferObject {
     glm::mat4 modelView;
-    glm::mat4 staticModelView;
-    glm::vec3 staticCameraPosition;
+    glm::mat4 inverseStaticModelView;
+    float quantization;
 };
 
 
@@ -156,6 +162,10 @@ class VulkanTestApplication {
     VDeleter<VkCommandPool> commandPool{ device, vkDestroyCommandPool };
     std::vector<VkCommandBuffer> commandBuffers;
 
+    VDeleter<VkQueryPool> queryPool{ device, vkDestroyQueryPool };
+    VDeleter<VkBuffer> queryResultBuffer{ device, vkDestroyBuffer };
+    VDeleter<VkDeviceMemory> queryResultBufferMemory{ device, vkFreeMemory };
+
     VDeleter<VkSemaphore> imageAvailableSemaphore{ device, vkDestroySemaphore };
     VDeleter<VkSemaphore> renderFinishedSemaphore{ device, vkDestroySemaphore };
 
@@ -198,6 +208,7 @@ class VulkanTestApplication {
         createDescriptorSetLayout();
         createGraphicsPipeline();
         createCommandPool();
+        createQueryPool();
         createDepthResources();
         createFramebuffers();
         createTextureImage();
@@ -318,6 +329,7 @@ class VulkanTestApplication {
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
         deviceFeatures.geometryShader = true;
+        deviceFeatures.pipelineStatisticsQuery = true;
 
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -508,6 +520,17 @@ class VulkanTestApplication {
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT |
                                           VK_SHADER_STAGE_VERTEX_BIT;
 
+        switch (SHADER_TYPE) {
+        case ShaderType::sphericalPoint:
+            samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT |
+                                              VK_SHADER_STAGE_VERTEX_BIT;
+            break;
+        case ShaderType::sphericalMesh:
+            samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT |
+                                              VK_SHADER_STAGE_GEOMETRY_BIT;
+            break;
+        }
+
         std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
         VkDescriptorSetLayoutCreateInfo layoutInfo = {};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -521,9 +544,22 @@ class VulkanTestApplication {
     }
 
     void createGraphicsPipeline() {
-        auto vertShaderCode = utility::readFile("shaders/vert.spv");
-        auto geometryShaderCode = utility::readFile("shaders/geom.spv");
-        auto fragShaderCode = utility::readFile("shaders/frag.spv");
+        std::vector<char> vertShaderCode;
+        std::vector<char> geometryShaderCode;
+        std::vector<char> fragShaderCode;
+        switch (SHADER_TYPE) {
+        case ShaderType::sphericalPoint:
+            vertShaderCode = utility::readFile("shaders/pointVert.spv");
+            geometryShaderCode = utility::readFile("shaders/pointGeom.spv");
+            fragShaderCode = utility::readFile("shaders/frag.spv");
+            break;
+        case ShaderType::sphericalMesh:
+            vertShaderCode = utility::readFile("shaders/meshVert.spv");
+            geometryShaderCode = utility::readFile("shaders/meshGeom.spv");
+            fragShaderCode = utility::readFile("shaders/frag.spv");
+            break;
+        }
+
         utility::createShaderModule(device, vertShaderCode, vertShaderModule);
         utility::createShaderModule(device, geometryShaderCode, geometryShaderModule);
         utility::createShaderModule(device, fragShaderCode, fragShaderModule);
@@ -564,7 +600,11 @@ class VulkanTestApplication {
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
         inputAssembly.sType =
             VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        if (SHADER_TYPE == ShaderType::sphericalPoint) {
+            inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+        } else {
+            inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        }
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         VkViewport viewport = {};
@@ -592,8 +632,8 @@ class VulkanTestApplication {
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_NONE;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
         VkPipelineMultisampleStateCreateInfo multisampling = {};
@@ -676,6 +716,29 @@ class VulkanTestApplication {
                                 commandPool.replace()) != VK_SUCCESS) {
             throw std::runtime_error("failed to create command pool!");
         }
+    }
+
+    void createQueryPool() {
+        utility::QueueFamilyIndices queueFamilyIndices = utility::findQueueFamilies(
+                    physicalDevice, surface);
+
+        VkQueryPoolCreateInfo poolInfo = {};
+        poolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        poolInfo.pNext = NULL;
+        poolInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+        poolInfo.flags = 0;
+        poolInfo.queryCount = 1;
+        poolInfo.pipelineStatistics =
+            VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT;
+
+        if (vkCreateQueryPool(device, &poolInfo, nullptr,
+                              queryPool.replace()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create query pool!");
+        }
+
+        utility::createBuffer(device, physicalDevice, 4 * sizeof(uint64_t),
+                              VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                              VK_SHARING_MODE_EXCLUSIVE, queryResultBuffer, queryResultBufferMemory);
     }
 
     VkFormat findDepthFormat() {
@@ -961,7 +1024,7 @@ class VulkanTestApplication {
             renderPassInfo.renderArea.extent = swapChainExtent;
 
             std::array<VkClearValue, 2> clearValues = {};
-            clearValues[0].color = { 1.0f, 0.0f, 0.0f, 1.0f };
+            clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
             clearValues[1].depthStencil = { 1.0f, 0 };
 
             renderPassInfo.clearValueCount = clearValues.size();
@@ -970,26 +1033,45 @@ class VulkanTestApplication {
             VkBuffer vertexBuffers[] = { vertexBuffer };
             VkDeviceSize offsets[] = { 0 };
 
+            vkCmdResetQueryPool(commandBuffers[i], queryPool, 0, 1);
+
+            vkCmdBeginQuery(commandBuffers[i], queryPool, 0, 0);
+
             vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo,
                                  VK_SUBPASS_CONTENTS_INLINE);
 
             vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
                               graphicsPipeline);
 
-            vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
+            if (SHADER_TYPE == ShaderType::sphericalMesh) {
+                vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            }
 
-            vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
-            vkCmdDrawIndexed(commandBuffers[i], indices.size(), 1, 0, 0, 0);
+            if (SHADER_TYPE == ShaderType::sphericalMesh) {
+                vkCmdDrawIndexed(commandBuffers[i], indices.size(), 1, 0, 0, 0);
+            } else {
+                vkCmdDraw(commandBuffers[i], vertices.size(), 1, 0, 0);
+            }
+
+            vkCmdEndQuery(commandBuffers[i], queryPool, 0);
 
             vkCmdEndRenderPass(commandBuffers[i]);
+
+            vkCmdCopyQueryPoolResults(
+                commandBuffers[i], queryPool, 0, 1,
+                queryResultBuffer, 0, sizeof(uint64_t),
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 
             if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to record command buffer!");
             }
+
+
         }
     }
 
@@ -1066,6 +1148,11 @@ class VulkanTestApplication {
                 frames = 0;
                 startTime = time;
                 std::cout << "FPS:" << fps << std::endl;
+
+                uint64_t queryResult;
+                vkGetQueryPoolResults(device, queryPool, 0, 1,  sizeof(uint64_t), &queryResult,
+                                      sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+                std::cout << "Query result: " << queryResult << std::endl;
             }
         }
         vkDeviceWaitIdle(device);
@@ -1075,20 +1162,17 @@ class VulkanTestApplication {
         UniformBufferObject ubo = {};
 
         // TODO(grouma) - Load this from the data file
-        ubo.staticModelView =  glm::mat4(-0.803483f, 0.0f, 0.595328f, -5.12849f,
-                                         0.021815f, 0.999328f, 0.0294426f, -1.11922f,
-                                         0.594928f, -0.0366437f, 0.802944f, -24.3537f,
-                                         0.0f, 0.0f, 0.0f, 1.0f);
-
-        ubo.staticCameraPosition = utility::lookAtCameraPosition(ubo.staticModelView);
-
-        ubo.modelView =  clip *
-                         glm::perspective(glm::radians(45.0f),
-                                          (float)swapChainExtent.width / (float)swapChainExtent.height, 0.001f,
-                                          256.0f) *
-                         glm::lookAt(camera.cameraPos,
-                                     camera.cameraPos + camera.cameraFront,
-                                     camera.cameraUp);
+        auto staticModelView =  glm::mat4(-0.803483f, 0.0f, 0.595328f, -5.12849f,
+                                          0.021815f, 0.999328f, 0.0294426f, -1.11922f,
+                                          0.594928f, -0.0366437f, 0.802944f, -24.3537f,
+                                          0.0f, 0.0f, 0.0f, 1.0f);
+        ubo.quantization = 4.0f;
+        ubo.inverseStaticModelView = glm::inverse(staticModelView);
+        ubo.modelView =  clip * glm::perspective(glm::radians(45.0f),
+                         (float)swapChainExtent.width / (float)swapChainExtent.height, 0.01f,
+                         2000.0f) * glm::lookAt(camera.cameraPos,
+                                                camera.cameraPos + camera.cameraFront,
+                                                camera.cameraUp);
 
         void* data;
         vkMapMemory(device, uniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);

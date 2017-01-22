@@ -35,10 +35,10 @@ struct Vertex {
 static void buildMesh(uint32_t res_x, uint32_t res_y,
                       std::vector<Vertex>& vertices,
                       std::vector<uint32_t>& indices) {
-    for (int y = 0; y <= res_y; y++) {
-        for (int x = 0; x <= res_x; x++) {
-            float xVal = float(x + 0.5f) / float(res_x) *  2.0f - 1.0f;
-            float yVal =  float(y + 0.5f) / float(res_y) * 2.0f - 1.0f;
+    for (int y = 0; y < res_y; y++) {
+        for (int x = 0; x < res_x; x++) {
+            float xVal = float(x) / float(res_x) *  2.0f - 1.0f;
+            float yVal =  float(y) / float(res_y) * 2.0f - 1.0f;
             vertices.push_back({ {
                     xVal,
                     yVal,
