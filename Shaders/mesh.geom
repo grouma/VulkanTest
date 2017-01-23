@@ -22,12 +22,14 @@ float minDepth = 0;
 float maxDepth = 1.0;
 
 vec3 unproject(vec2 win) {
-	float z = -sqrt(1 - win.x * win.x - win.y * win.y); 
+	float scale = 1 - win.y * win.y;
+	// Invert y to account for Vulkan coordinate system.
+	float y = win.y * -1;
+	// Scale x to account for hemisphere projection.
+	float x = win.x * scale;
+	float z = -sqrt(1 - x * x - y * y); 
 	if(z < 0){
-		float scale = 1 - win.y * win.y;
-		// Scale x to account for hemisphere projection and invert y to account for vulkan
-		// coordinate system.
-		vec4 outVals = ubo.inverseStaticModelView * vec4(win.x * (scale), -win.y, z, 1.0);
+		vec4 outVals = ubo.inverseStaticModelView * vec4(x, y, z, 1.0);
 		return vec3(outVals[0], outVals[1], outVals[2]) / outVals.w;
 	}else
 		return vec3(0);
@@ -35,8 +37,8 @@ vec3 unproject(vec2 win) {
 }
 
 vec3 reconstructWorldPosition(vec2 ndc, float depth) {
-	vec3 planePosition = unproject(ndc);
-	return depth * normalize(planePosition);
+	vec3 pos = unproject(ndc);
+	return depth * normalize(pos);
 }
 
 float getDepth(int idx) {
