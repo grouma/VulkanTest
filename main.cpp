@@ -53,7 +53,7 @@ enum ShaderType {
     sphericalPoint, sphericalMesh
 };
 
-const ShaderType SHADER_TYPE = sphericalPoint;
+const ShaderType SHADER_TYPE = sphericalMesh;
 
 void DestroyDebugReportCallbackEXT(VkInstance instance,
                                    VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) {
