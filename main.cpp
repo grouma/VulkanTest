@@ -186,6 +186,13 @@ class VulkanTestApplication {
         app->camera.handleMouseInput(xpos, ypos);
     }
 
+    static void mouse_button_callback(GLFWwindow* window, int button, int action,
+                                      int mods) {
+        VulkanTestApplication* app = reinterpret_cast<VulkanTestApplication*>
+                                     (glfwGetWindowUserPointer(window));
+        app->camera.handleMouseButton(button, action);
+    }
+
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -193,6 +200,7 @@ class VulkanTestApplication {
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         glfwSetKeyCallback(window, key_callback);
         glfwSetCursorPosCallback(window, mouse_callback);
+        glfwSetMouseButtonCallback(window, mouse_button_callback);
         glfwSetWindowUserPointer(window, this);
     }
 

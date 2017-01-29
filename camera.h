@@ -17,6 +17,7 @@ class Camera {
     Camera(int width, int height) {
         lastX = width / 2;
         lastY = height / 2;
+        setViewChanged(true);
     };
 
     bool viewChanged() {
@@ -27,6 +28,12 @@ class Camera {
         _viewChanged = newValue;
     }
 
+    void handleMouseButton(int button, int action) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            _buttonDown = action == GLFW_PRESS;
+        }
+    }
+
     void handleMouseInput(double xpos, double ypos) {
         float xoffset = xpos - lastX;
         float yoffset = ypos - lastY;
@@ -35,29 +42,29 @@ class Camera {
 
         lastX = xpos;
         lastY = ypos;
+        if (_buttonDown) {
+            xoffset *= _sensitivity;
+            yoffset *= _sensitivity;
 
-        float sensitivity = 0.20f;
-        xoffset *= sensitivity;
-        yoffset *= sensitivity;
+            yaw += xoffset;
+            pitch += yoffset;
 
-        yaw += xoffset;
-        pitch += yoffset;
+            if (pitch > 89.0f)
+                pitch = 89.0f;
+            if (pitch < -89.0f)
+                pitch = -89.0f;
 
-        if (pitch > 89.0f)
-            pitch = 89.0f;
-        if (pitch < -89.0f)
-            pitch = -89.0f;
-
-        glm::vec3 front;
+            glm::vec3 front;
 
 
-        front.x = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-        front.y = sin(glm::radians(pitch));
-        front.z = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+            front.x = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+            front.y = sin(glm::radians(pitch));
+            front.z = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
 
-        cameraFront = glm::normalize(front);
+            cameraFront = glm::normalize(front);
 
-        setViewChanged(true);
+            setViewChanged(true);
+        }
     }
 
     void handleKeyInput(int key) {
@@ -77,6 +84,8 @@ class Camera {
   private:
     float lastX, lastY, yaw = 0, pitch = 0;
     bool _viewChanged = false;
+    bool _buttonDown = false;
+    float _sensitivity = 0.20f;
 
 };
 
