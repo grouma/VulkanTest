@@ -61,7 +61,7 @@ class Camera {
     }
 
     void handleKeyInput(int key) {
-        float cameraSpeed = 0.01f;
+        float cameraSpeed = 0.5f;
         if (key == GLFW_KEY_W)
             cameraPos += cameraSpeed * cameraFront;
         if (key == GLFW_KEY_S)

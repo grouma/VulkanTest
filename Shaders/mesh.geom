@@ -7,8 +7,8 @@ layout (triangle_strip,  max_vertices = 6) out;
 
 layout(binding = 0) uniform UniformBufferObject {
     mat4 modelView;
-	mat4 inverseStaticModelView;
-	float quantization;
+	vec3 quantization;
+	float threshold;
 } ubo;
 
 layout(binding = 1) uniform sampler2D texSampler;
@@ -18,25 +18,19 @@ layout(location = 0) in vec2 posGeom[];
 layout(location = 0) out vec2 texCoord;
 
 bool hasZeroDepth = false;
-float minDepth = 0;
-float maxDepth = 1.0;
 
-vec3 unproject(vec2 win) {
-	float z = -sqrt(1 - win.x * win.x - win.y * win.y); 
-	if(z < 0){
-		float scale = 1 - win.y * win.y;
-		// Scale x to account for hemisphere projection and invert y to account for vulkan
-		// coordinate system.
-		vec4 outVals = ubo.inverseStaticModelView * vec4(win.x * (scale), -win.y, z, 1.0);
-		return vec3(outVals[0], outVals[1], outVals[2]) / outVals.w;
-	}else
-		return vec3(0);
+vec4 positionFromDepth(vec2 win, float depth) {
+	float scale = sqrt(1 - win.y * win.y);
+	float x = win.x * scale;
+	float y = win.y;
+	float z = 1.0 - x * x - y * y; 
+	vec3 hemiPos = vec3(x,y,sqrt(z)) * depth;
+	if(z>ubo.threshold){
+		return vec4(hemiPos, 1.0);
+	}else{
+		return vec4(0);
+	}
 	
-}
-
-vec3 reconstructWorldPosition(vec2 ndc, float depth) {
-	vec3 planePosition = unproject(ndc);
-	return depth * normalize(planePosition);
 }
 
 float getDepth(int idx) {
@@ -44,7 +38,10 @@ float getDepth(int idx) {
 	if(depth == 0)
 		hasZeroDepth = true;
 
-	depth = pow(depth, ubo.quantization);
+	float minDepth = ubo.quantization.x;
+	float maxDepth = ubo.quantization.y;
+	depth = pow(depth, ubo.quantization.z);
+	depth = depth * (maxDepth - minDepth) + minDepth;
 	return depth;
 }
 
@@ -52,8 +49,7 @@ void emitPosition(int idx, float depth) {
 	vec2 pos = posGeom[idx].xy;
 	texCoord = pos * 0.5 + 0.5;
 
-	vec3 positionFromDepth = reconstructWorldPosition(pos, depth);
-	gl_Position = ubo.modelView * vec4(positionFromDepth,1);
+	gl_Position = ubo.modelView * positionFromDepth(pos, depth);
 	EmitVertex();
 }
 
@@ -66,12 +62,10 @@ void main() {
 		float minDepth = min(d0, min(d1, d2));
 		float maxDepth = max(d0, max(d1, d2));
 		float minDist = maxDepth - minDepth;
-		
+
 		float avgDepth = (d0 + d1 + d2) / 3.0;
 		
-		float thres = 0.1;
-		
-		if(minDist / avgDepth < thres ) {
+		if(minDist / avgDepth < ubo.threshold) {
 			emitPosition(0, d0);
 			emitPosition(1, d1);
 			emitPosition(2, d2);

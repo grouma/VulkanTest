@@ -53,7 +53,7 @@ enum ShaderType {
     sphericalPoint, sphericalMesh
 };
 
-const ShaderType SHADER_TYPE = sphericalMesh;
+const ShaderType SHADER_TYPE = sphericalPoint;
 
 void DestroyDebugReportCallbackEXT(VkInstance instance,
                                    VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator) {
@@ -94,8 +94,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
 struct UniformBufferObject {
     glm::mat4 modelView;
-    glm::mat4 inverseStaticModelView;
-    float quantization;
+    glm::vec3 quantization;
+    float threshold;
 };
 
 
@@ -632,8 +632,8 @@ class VulkanTestApplication {
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.cullMode = VK_CULL_MODE_NONE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
         VkPipelineMultisampleStateCreateInfo multisampling = {};
@@ -1161,18 +1161,15 @@ class VulkanTestApplication {
     void updateUniformBuffer() {
         UniformBufferObject ubo = {};
 
-        // TODO(grouma) - Load this from the data file
-        auto staticModelView =  glm::mat4(-0.803483f, 0.0f, 0.595328f, -5.12849f,
-                                          0.021815f, 0.999328f, 0.0294426f, -1.11922f,
-                                          0.594928f, -0.0366437f, 0.802944f, -24.3537f,
-                                          0.0f, 0.0f, 0.0f, 1.0f);
-        ubo.quantization = 4.0f;
-        ubo.inverseStaticModelView = glm::inverse(staticModelView);
         ubo.modelView =  clip * glm::perspective(glm::radians(45.0f),
                          (float)swapChainExtent.width / (float)swapChainExtent.height, 0.01f,
                          2000.0f) * glm::lookAt(camera.cameraPos,
                                                 camera.cameraPos + camera.cameraFront,
                                                 camera.cameraUp);
+
+        // TODO(grouma) - Load this from the data file
+        ubo.quantization = glm::vec3(2.0f, 70.0f, 4.0f);
+        ubo.threshold = 0.05f;
 
         void* data;
         vkMapMemory(device, uniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);
